@@ -325,11 +325,21 @@ def generate_clock_image(
     draw.line([(div_x,  H - 92), (div_x,  H - 15)], fill=0, width=1)
     draw.line([(div_x2, H - 92), (div_x2, H - 15)], fill=0, width=1)
 
-    day_name = DAYS_HE[now.weekday()]
-    date_str = jewish_date if jewish_date else f"{now.day} {MONTHS_HE[now.month - 1]}"
-    left_cx  = (bar_left + div_x) // 2
+    day_name   = DAYS_HE[now.weekday()]
+    date_str   = jewish_date if jewish_date else f"{now.day} {MONTHS_HE[now.month - 1]}"
+    left_cx    = (bar_left + div_x) // 2
+    cell_w     = div_x - bar_left - 10
+    date_font  = font_small
+    while True:
+        bbox = draw.textbbox((0, 0), date_str, font=date_font)
+        if (bbox[2] - bbox[0]) <= cell_w:
+            break
+        cur = getattr(date_font, "size", 34)
+        if cur <= 20:
+            break
+        date_font = get_font(cur - 2, fn)
     draw.text((left_cx, bar_cy - 14), day_name, font=font_small, fill=0, anchor="mm")
-    draw.text((left_cx, bar_cy + 14), date_str, font=font_small, fill=0, anchor="mm")
+    draw.text((left_cx, bar_cy + 14), date_str, font=date_font, fill=0, anchor="mm")
 
     mid_x = (div_x + div_x2) // 2
     if period_line:

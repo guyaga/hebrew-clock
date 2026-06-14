@@ -8,11 +8,17 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl \
+      curl libraqm0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# build libs only needed to compile Pillow with raqm on armv7
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential libraqm-dev libfreetype6-dev libjpeg-dev zlib1g-dev \
+ && pip install --no-cache-dir -r requirements.txt \
+ && apt-get purge -y build-essential libraqm-dev libfreetype6-dev libjpeg-dev zlib1g-dev \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY app/ /app/app/
 # Font files and sleeping.png must be present at /app/ (FONT_DIR default)

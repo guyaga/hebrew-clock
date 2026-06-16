@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from app.api.v1.router import router
@@ -29,6 +31,9 @@ app = FastAPI(
 )
 
 app.include_router(router)
+
+_APP_DIR = Path(__file__).parent  # = app/
+app.mount("/static", StaticFiles(directory=str(_APP_DIR / "static")), name="static")
 
 
 @app.get("/health")

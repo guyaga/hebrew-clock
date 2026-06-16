@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Request, Query
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
+from fastapi.templating import Jinja2Templates
 
 from app.services import clock, weather as weather_svc, jewish_cal as jewish_cal_svc
 
@@ -8,12 +11,26 @@ router = APIRouter()
 
 DEFAULT_FONT = clock.DEFAULT_FONT
 
-
-@router.get(
-    "/",
-    responses={200: {"content": {"image/png": {}}}},
-    response_class=Response,
+# Path(__file__) = app/api/v1/router.py  →  .parent×3 = app/
+_TEMPLATES = Jinja2Templates(
+    directory=str(Path(__file__).parent.parent.parent / "templates")
 )
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def home(request: Request) -> HTMLResponse:
+    return _TEMPLATES.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "fonts": sorted(clock.VALID_FONTS),
+            "default_font": clock.DEFAULT_FONT,
+            "default_location": "Tel Aviv",
+            "default_calendar": "gregorian",
+        },
+    )
+
+
 @router.get(
     "/clock",
     responses={200: {"content": {"image/png": {}}}},

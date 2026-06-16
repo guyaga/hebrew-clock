@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hebrew Clock</title>
+  <link rel="stylesheet" href="/static/tailwind.min.css">
+  <meta name="description" content="Hebrew clock face generator for e-paper displays — customize font, location and calendar, then paste the URL into your ESP32 device config.">
+  <meta name="keywords" content="Hebrew clock, e-paper display, ESP32, ePaper, Waveshare, Hebrew date, Jewish calendar, IoT clock, Tomer Klein, תומר קליין, שעון מילים, שעון עברית">
+  <link rel="canonical" href="{{ base_url }}/">
+  <meta property="og:title" content="Hebrew Clock">
+  <meta property="og:description" content="Hebrew clock face generator for e-paper displays — customize font, location and calendar, then paste the URL into your ESP32 device config.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ base_url }}/">
+  <meta property="og:image" content="{{ base_url }}/clock.png?font=NotoSansHebrew-Bold&amp;location=Tel+Aviv&amp;calendar=gregorian">
+  <meta property="og:image:width" content="800">
+  <meta property="og:image:height" content="480">
+  {% if gtag_id %}
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag_id }}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '{{ gtag_id }}');
+  </script>
+  {% endif %}
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+  <!-- Header -->
+  <header class="bg-gray-900 text-white px-6 py-4 flex items-center gap-3 shadow-lg">
+    <svg class="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>
+    </svg>
+    <h1 class="text-xl font-semibold tracking-tight">Hebrew Clock</h1>
+  </header>
+
+  <!-- Two-panel layout -->
+  <main class="flex flex-col lg:flex-row gap-6 p-6 max-w-7xl mx-auto">
+
+    <!-- Settings panel -->
+    <aside class="w-full lg:w-2/5 shrink-0">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-6">
+        <h2 class="text-base font-semibold text-gray-800 uppercase tracking-wide">Settings</h2>
+
+        <!-- Font -->
+        <div class="space-y-1.5">
+          <label for="font" class="block text-sm font-medium text-gray-700">Font</label>
+          <select id="font"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                         transition-colors cursor-pointer">
+            {% for f in fonts %}
+            <option value="{{ f }}"{% if f == default_font %} selected{% endif %}>{{ f }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Location -->
+        <div class="space-y-1.5">
+          <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
+          <input id="location" type="text" value="{{ default_location }}"
+                 placeholder="e.g. Jerusalem"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                        transition-colors">
+        </div>
+
+        <!-- Calendar -->
+        <div class="space-y-2">
+          <p class="text-sm font-medium text-gray-700">Calendar</p>
+          <div class="flex gap-6">
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input type="radio" name="calendar" value="gregorian"
+                     {% if default_calendar == 'gregorian' %}checked{% endif %}
+                     class="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer">
+              Gregorian
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input type="radio" name="calendar" value="jewish"
+                     {% if default_calendar == 'jewish' %}checked{% endif %}
+                     class="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer">
+              Jewish
+            </label>
+          </div>
+        </div>
+
+        <!-- Sleep mode toggle -->
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-sm font-medium text-gray-700">Sleep Mode</span>
+          <button id="sleep-toggle" type="button" role="switch" aria-checked="false"
+                  class="relative inline-flex h-6 w-11 items-center rounded-full
+                         bg-gray-300 transition-colors duration-200
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <span id="sleep-thumb"
+                  class="inline-block h-4 w-4 transform rounded-full bg-white shadow
+                         transition-transform duration-200 translate-x-1">
+            </span>
+          </button>
+        </div>
+
+        <!-- Hint -->
+        <p class="text-xs text-gray-400 leading-relaxed pt-1">
+          Changes apply instantly. Copy the URL below and paste it into your device's config.
+        </p>
+      </div>
+    </aside>
+
+    <!-- Preview panel -->
+    <section class="flex-1 flex flex-col gap-4">
+
+      <!-- Image preview -->
+      <div class="bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+        <div class="relative" style="aspect-ratio: 800/480;">
+          <img id="preview"
+               src="/clock.png?font={{ default_font }}&location={{ default_location }}&calendar={{ default_calendar }}&sleeptime=0"
+               alt="Clock preview"
+               class="w-full h-full object-contain">
+
+          <!-- Loading spinner -->
+          <div id="spinner"
+               class="absolute inset-0 flex items-center justify-center bg-gray-800/75 hidden">
+            <div class="h-9 w-9 animate-spin rounded-full border-4 border-white border-t-transparent"></div>
+          </div>
+
+          <!-- Error state -->
+          <div id="preview-error"
+               class="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 hidden gap-2">
+            <svg class="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <p class="text-red-400 text-sm">Failed to load preview</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- URL bar -->
+      <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+        <label class="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
+          Device URL
+        </label>
+        <div class="flex gap-2">
+          <input id="clock-url" type="text" readonly
+                 class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2
+                        text-sm font-mono text-gray-700 focus:outline-none select-all">
+          <button id="copy-btn"
+                  class="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+                         text-white text-sm font-medium rounded-lg transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            Copy
+          </button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    const previewImg   = document.getElementById('preview');
+    const spinner      = document.getElementById('spinner');
+    const errorEl      = document.getElementById('preview-error');
+    const urlInput     = document.getElementById('clock-url');
+    const copyBtn      = document.getElementById('copy-btn');
+    const sleepToggle  = document.getElementById('sleep-toggle');
+    const sleepThumb   = document.getElementById('sleep-thumb');
+
+    let sleepMode    = false;
+    let debounceTimer = null;
+
+    function buildPath() {
+      const font     = document.getElementById('font').value;
+      const location = document.getElementById('location').value.trim() || 'Tel Aviv';
+      const calendar = document.querySelector('input[name="calendar"]:checked').value;
+      const sleeptime = sleepMode ? '1' : '0';
+      const p = new URLSearchParams({ font, location, calendar, sleeptime });
+      return '/clock.png?' + p.toString();
+    }
+
+    function updatePreview() {
+      const path = buildPath();
+      urlInput.value = window.location.origin + path;
+
+      spinner.classList.remove('hidden');
+      errorEl.classList.add('hidden');
+
+      const next = new Image();
+      next.onload  = () => { previewImg.src = path; spinner.classList.add('hidden'); };
+      next.onerror = () => { spinner.classList.add('hidden'); errorEl.classList.remove('hidden'); };
+      next.src = path;
+    }
+
+    function updateDebounced() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(updatePreview, 500);
+    }
+
+    document.getElementById('font').addEventListener('change', updatePreview);
+    document.getElementById('location').addEventListener('input', updateDebounced);
+    document.querySelectorAll('input[name="calendar"]').forEach(r =>
+      r.addEventListener('change', updatePreview)
+    );
+
+    sleepToggle.addEventListener('click', () => {
+      sleepMode = !sleepMode;
+      sleepToggle.setAttribute('aria-checked', String(sleepMode));
+      sleepToggle.classList.toggle('bg-blue-600', sleepMode);
+      sleepToggle.classList.toggle('bg-gray-300', !sleepMode);
+      sleepThumb.classList.toggle('translate-x-6', sleepMode);
+      sleepThumb.classList.toggle('translate-x-1', !sleepMode);
+      updatePreview();
+    });
+
+    function flashCopied() {
+      copyBtn.textContent = 'Copied!';
+      copyBtn.classList.replace('bg-blue-600', 'bg-green-600');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+        copyBtn.classList.replace('bg-green-600', 'bg-blue-600');
+      }, 1500);
+    }
+
+    copyBtn.addEventListener('click', () => {
+      const text = urlInput.value;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(flashCopied).catch(() => {
+          urlInput.select();
+        });
+      } else {
+        urlInput.select();
+      }
+    });
+
+    // Initialise URL bar and start first load
+    urlInput.value = window.location.origin + buildPath();
+    previewImg.addEventListener('load',  () => spinner.classList.add('hidden'));
+    previewImg.addEventListener('error', () => {
+      spinner.classList.add('hidden');
+      errorEl.classList.remove('hidden');
+    });
+    spinner.classList.remove('hidden');
+    if (previewImg.complete) {
+      spinner.classList.add('hidden');
+    }
+  </script>
+
+</body>
+</html>

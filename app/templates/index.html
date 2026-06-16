@@ -192,15 +192,24 @@
       updatePreview();
     });
 
+    function flashCopied() {
+      copyBtn.textContent = 'Copied!';
+      copyBtn.classList.replace('bg-blue-600', 'bg-green-600');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+        copyBtn.classList.replace('bg-green-600', 'bg-blue-600');
+      }, 1500);
+    }
+
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(urlInput.value).then(() => {
-        copyBtn.textContent = 'Copied!';
-        copyBtn.classList.replace('bg-blue-600', 'bg-green-600');
-        setTimeout(() => {
-          copyBtn.textContent = 'Copy';
-          copyBtn.classList.replace('bg-green-600', 'bg-blue-600');
-        }, 1500);
-      });
+      const text = urlInput.value;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(flashCopied).catch(() => {
+          urlInput.select();
+        });
+      } else {
+        urlInput.select();
+      }
     });
 
     // Initialise URL bar and start first load
@@ -211,6 +220,9 @@
       errorEl.classList.remove('hidden');
     });
     spinner.classList.remove('hidden');
+    if (previewImg.complete) {
+      spinner.classList.add('hidden');
+    }
   </script>
 
 </body>

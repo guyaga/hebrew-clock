@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from app.core.config import settings
 from app.services import clock, weather as weather_svc, jewish_cal as jewish_cal_svc
 from app.services import seo as seo_svc
+from app.services import arbox as arbox_svc
 
 router = APIRouter()
 
@@ -72,6 +73,7 @@ async def get_clock(
     sleeptime: str = Query(default="0"),
     location:  str = Query(default="Tel Aviv"),
     calendar:  str = Query(default="gregorian"),
+    gym:       str = Query(default="1"),
 ) -> Response:
     loc = location or "Tel Aviv"
     w = await weather_svc.get_weather(loc, request.app.state.http_client)
@@ -81,12 +83,17 @@ async def get_clock(
         today = clock.get_israel_time().date()
         jdate = await jewish_cal_svc.get_jewish_date(today, request.app.state.http_client)
 
+    next_session = None
+    if gym != "0" and arbox_svc.is_configured():
+        next_session = await run_in_threadpool(arbox_svc.get_next_session)
+
     img_bytes = await run_in_threadpool(
         clock.generate_clock_image,
-        font_name   = font,
-        sleep_time  = sleeptime == "1",
-        weather     = w,
-        jewish_date = jdate,
+        font_name    = font,
+        sleep_time   = sleeptime == "1",
+        weather      = w,
+        jewish_date  = jdate,
+        next_session = next_session,
     )
     return Response(
         content=img_bytes,

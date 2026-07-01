@@ -13,3 +13,5 @@ services:
         value: 8
       - key: LOG_LEVEL
         value: info
+      - key: PYTHON_VERSION
+        value: "3.12.7"

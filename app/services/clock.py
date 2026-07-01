@@ -258,11 +258,48 @@ def _generate_quiet_image(font_name: str) -> bytes:
     return _png_bytes(img)
 
 
+def _draw_dumbbell(draw: ImageDraw.Draw, cx: int, cy: int, s: int = 18) -> None:
+    """Small dumbbell glyph: a bar with a plate + end-cap on each side."""
+    bar_hw = s
+    draw.rectangle([cx - bar_hw, cy - 3, cx + bar_hw, cy + 3], fill=0)
+    for sx in (-1, 1):
+        ox = cx + sx * bar_hw
+        draw.rectangle([ox - 5, cy - 14, ox + 5, cy + 14], fill=0)
+        cap = ox + sx * 8
+        draw.rectangle([cap - 3, cy - 9, cap + 3, cy + 9], fill=0)
+
+
+def _rel_day(date_s: str, now: datetime.datetime) -> str:
+    try:
+        d = datetime.date.fromisoformat(date_s)
+    except ValueError:
+        return ""
+    delta = (d - now.date()).days
+    if delta == 0:
+        return "הַיּוֹם"
+    if delta == 1:
+        return "מָחָר"
+    return DAYS_HE[d.weekday()]
+
+
+def _format_next_session(ns: dict, now: datetime.datetime) -> str:
+    rel = _rel_day(ns.get("date", ""), now)
+    line = "הָאִימוּן הַבָּא"
+    bits = [b for b in (rel, ns.get("time", "")) if b]
+    if bits:
+        line += " · " + " ".join(bits)
+    cat = (ns.get("category") or "").strip()
+    if cat:
+        line += " · " + cat
+    return line
+
+
 def generate_clock_image(
     font_name:   str        = DEFAULT_FONT,
     sleep_time:  bool       = False,
     weather:     dict | None = None,
     jewish_date: str | None  = None,
+    next_session: dict | None = None,
 ) -> bytes:
     fn = font_name if font_name in VALID_FONTS else DEFAULT_FONT
 
@@ -287,20 +324,18 @@ def generate_clock_image(
     time_lines  = [l for l in lines if l not in PERIOD_WORDS]
     period_line = next((l for l in lines if l in PERIOD_WORDS), "")
 
-    font_large  = get_font(100, fn)
+    font_large  = get_font(108, fn)
     font_medium = get_font(58,  fn)
     font_small  = get_font(34,  fn)
 
-    clock_cx, clock_cy, clock_r = W // 2, PAD2 + 75, 68
-    _draw_analog_clock(draw, clock_cx, clock_cy, clock_r, h24, m, fn)
-
-    text_start_y = clock_cy + clock_r + 15
-    text_area_h  = H - 110 - text_start_y
+    # ── Hero: the time spelled out in Hebrew (analog clock removed) ──
+    has_gym      = bool(next_session and next_session.get("time"))
+    words_top    = PAD2 + 18
+    words_bottom = (H - 190) if has_gym else (H - 118)
     n            = len(time_lines)
-    line_h       = 95
+    line_h       = 100
     total_h      = n * line_h
-    ty           = max(clock_cy + clock_r + 40,
-                       text_start_y + (text_area_h - total_h) // 2 + 10)
+    ty           = words_top + (words_bottom - words_top - total_h) // 2 + line_h // 2
 
     for i, line in enumerate(time_lines):
         f = font_large
@@ -308,11 +343,32 @@ def generate_clock_image(
             bbox = draw.textbbox((0, 0), line, font=f)
             if (bbox[2] - bbox[0]) < (W - 60):
                 break
-            current_size = getattr(f, "size", 100)
+            current_size = getattr(f, "size", 108)
             if current_size <= 40:
                 break
             f = get_font(current_size - 6, fn)
         draw.text((W // 2, ty + i * line_h), line, font=f, fill=0, anchor="mm")
+
+    # ── Next ARBOX session band ──
+    if has_gym:
+        gym_cy = H - 138
+        draw.line([(PAD2 + 40, H - 176), (W - PAD2 - 40, H - 176)], fill=0, width=1)
+        gym_text = _format_next_session(next_session, now)
+        gf = get_font(38, fn)
+        while True:
+            bb = draw.textbbox((0, 0), gym_text, font=gf)
+            if (bb[2] - bb[0]) <= (W - 150):
+                break
+            cur = getattr(gf, "size", 38)
+            if cur <= 22:
+                break
+            gf = get_font(cur - 2, fn)
+        bb       = draw.textbbox((0, 0), gym_text, font=gf)
+        tw       = bb[2] - bb[0]
+        icon_w, gap = 44, 14
+        group_left  = (W - (icon_w + gap + tw)) // 2
+        _draw_dumbbell(draw, group_left + icon_w // 2, gym_cy, s=18)
+        draw.text((group_left + icon_w + gap, gym_cy), gym_text, font=gf, fill=0, anchor="lm")
 
     sep_y = H - 105
     draw.line([(PAD2 + 8, sep_y), (W - PAD2 - 8, sep_y)], fill=0, width=1)

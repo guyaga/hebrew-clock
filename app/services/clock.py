@@ -2,6 +2,7 @@
 import datetime
 import io
 import math
+import os
 import random
 from pathlib import Path
 
@@ -60,6 +61,25 @@ DAYS_HE = [
     "יוֹם שֵׁנִי", "יוֹם שְׁלִישִׁי", "יוֹם רְבִיעִי",
     "יוֹם חֲמִישִׁי", "יוֹם שִׁישִּׁי", "שַׁבָּת", "יוֹם רִאשׁוֹן",
 ]
+
+# ── Love notes for מטר (rotate through the info band). Override with the
+#    LOVE_NOTES env var: a "|"-separated list, e.g. "שורה אחת|שורה שתיים". ──
+LOVE_NOTES = [
+    "מָטָר, אַתְּ כָּל כָּךְ מוּכְשֶׁרֶת",
+    "אַתְּ הָאִמָּא הֲכִי טוֹבָה בָּעוֹלָם",
+    "מָטָר, אַתְּ הַכִּי סֶקְסִית",
+    "אֵין עוֹבֶדֶת קָשָׁה מִמֵּךְ",
+    "אַתְּ חוֹלֶמֶת וּמַגְשִׁימָה",
+    "אַתְּ הַחֲבֵרָה הֲכִי טוֹבָה שֶׁלִּי",
+    "אַתְּ הָאֲהוּבָה שֶׁלִּי",
+    "אֵין כָּמוֹךְ עִם בַּעֲלֵי הַחַיִּים שֶׁלָּנוּ",
+    "אַתְּ גִּבּוֹרָה אֲמִתִּית",
+    "אַתְּ עוֹשָׂה קֶסֶם בַּיָּדַיִם",
+    "מָטָר, אֲנִי אוֹהֵב אוֹתָךְ",
+]
+# In auto mode, show a love note on 1 of every LOVE_CYCLE minutes (always if
+# there's no upcoming workout to show).
+LOVE_CYCLE = 4
 
 # ── Helpers ───────────────────────────────────────────
 
@@ -269,6 +289,15 @@ def _draw_dumbbell(draw: ImageDraw.Draw, cx: int, cy: int, s: int = 18) -> None:
         draw.rectangle([cap - 3, cy - 9, cap + 3, cy + 9], fill=0)
 
 
+def _draw_heart(draw: ImageDraw.Draw, cx: int, cy: int, s: int = 13) -> None:
+    """Small filled heart: two top lobes + a downward point."""
+    r = s
+    top = cy - r // 2
+    draw.ellipse([cx - r, top - r, cx, top + r], fill=0)
+    draw.ellipse([cx, top - r, cx + r, top + r], fill=0)
+    draw.polygon([(cx - r + 1, top), (cx + r - 1, top), (cx, cy + r)], fill=0)
+
+
 def _rel_day(date_s: str, now: datetime.datetime) -> str:
     try:
         d = datetime.date.fromisoformat(date_s)
@@ -294,12 +323,28 @@ def _format_next_session(ns: dict, now: datetime.datetime) -> str:
     return line
 
 
+def _get_love_notes() -> list[str]:
+    raw = os.environ.get("LOVE_NOTES", "").strip()
+    if raw:
+        notes = [n.strip() for n in raw.split("|") if n.strip()]
+        if notes:
+            return notes
+    return LOVE_NOTES
+
+
+def _pick_love_note(notes: list[str], now: datetime.datetime) -> str:
+    # Deterministic per minute, cycles through the list, varies across days.
+    idx = (now.timetuple().tm_yday * 1440 + now.hour * 60 + now.minute) % len(notes)
+    return notes[idx]
+
+
 def generate_clock_image(
     font_name:   str        = DEFAULT_FONT,
     sleep_time:  bool       = False,
     weather:     dict | None = None,
     jewish_date: str | None  = None,
     next_session: dict | None = None,
+    band_mode:   str          = "auto",
 ) -> bytes:
     fn = font_name if font_name in VALID_FONTS else DEFAULT_FONT
 
@@ -328,10 +373,22 @@ def generate_clock_image(
     font_medium = get_font(58,  fn)
     font_small  = get_font(34,  fn)
 
+    # ── Decide the info band: rotate the ARBOX workout with love notes ──
+    has_gym       = bool(next_session and next_session.get("time"))
+    love_notes    = _get_love_notes()
+    minute_of_day = now.hour * 60 + now.minute
+    if band_mode == "love":
+        show_love = bool(love_notes)
+    elif band_mode == "gym":
+        show_love = False
+    else:  # auto: mostly the workout, a love note every LOVE_CYCLE-th minute
+        love_slot = (minute_of_day % LOVE_CYCLE) == (LOVE_CYCLE - 1)
+        show_love = bool(love_notes) and (not has_gym or love_slot)
+    has_band = has_gym or show_love
+
     # ── Hero: the time spelled out in Hebrew (analog clock removed) ──
-    has_gym      = bool(next_session and next_session.get("time"))
     words_top    = PAD2 + 18
-    words_bottom = (H - 190) if has_gym else (H - 118)
+    words_bottom = (H - 190) if has_band else (H - 118)
     n            = len(time_lines)
     line_h       = 100
     total_h      = n * line_h
@@ -349,26 +406,31 @@ def generate_clock_image(
             f = get_font(current_size - 6, fn)
         draw.text((W // 2, ty + i * line_h), line, font=f, fill=0, anchor="mm")
 
-    # ── Next ARBOX session band ──
-    if has_gym:
-        gym_cy = H - 138
+    # ── Info band: workout (dumbbell) or a love note for מטר (heart) ──
+    if has_band:
+        band_cy = H - 138
         draw.line([(PAD2 + 40, H - 176), (W - PAD2 - 40, H - 176)], fill=0, width=1)
-        gym_text = _format_next_session(next_session, now)
-        gf = get_font(38, fn)
+        if show_love:
+            band_text = _pick_love_note(love_notes, now)
+            draw_icon, icon_s = _draw_heart, 13
+        else:
+            band_text = _format_next_session(next_session, now)
+            draw_icon, icon_s = _draw_dumbbell, 18
+        bf = get_font(38, fn)
         while True:
-            bb = draw.textbbox((0, 0), gym_text, font=gf)
+            bb = draw.textbbox((0, 0), band_text, font=bf)
             if (bb[2] - bb[0]) <= (W - 150):
                 break
-            cur = getattr(gf, "size", 38)
+            cur = getattr(bf, "size", 38)
             if cur <= 22:
                 break
-            gf = get_font(cur - 2, fn)
-        bb       = draw.textbbox((0, 0), gym_text, font=gf)
-        tw       = bb[2] - bb[0]
+            bf = get_font(cur - 2, fn)
+        bb          = draw.textbbox((0, 0), band_text, font=bf)
+        tw          = bb[2] - bb[0]
         icon_w, gap = 44, 14
         group_left  = (W - (icon_w + gap + tw)) // 2
-        _draw_dumbbell(draw, group_left + icon_w // 2, gym_cy, s=18)
-        draw.text((group_left + icon_w + gap, gym_cy), gym_text, font=gf, fill=0, anchor="lm")
+        draw_icon(draw, group_left + icon_w // 2, band_cy, s=icon_s)
+        draw.text((group_left + icon_w + gap, band_cy), band_text, font=bf, fill=0, anchor="lm")
 
     sep_y = H - 105
     draw.line([(PAD2 + 8, sep_y), (W - PAD2 - 8, sep_y)], fill=0, width=1)

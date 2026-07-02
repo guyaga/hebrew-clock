@@ -74,6 +74,7 @@ async def get_clock(
     location:  str = Query(default="Tel Aviv"),
     calendar:  str = Query(default="gregorian"),
     gym:       str = Query(default="1"),
+    band:      str = Query(default="auto"),
 ) -> Response:
     loc = location or "Tel Aviv"
     w = await weather_svc.get_weather(loc, request.app.state.http_client)
@@ -94,6 +95,7 @@ async def get_clock(
         weather      = w,
         jewish_date  = jdate,
         next_session = next_session,
+        band_mode    = band,
     )
     return Response(
         content=img_bytes,
